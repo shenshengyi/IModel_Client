@@ -220,7 +220,13 @@ class OpenIModelButton extends React.PureComponent<OpenIModelButtonProps, OpenIM
     this.props.onIModelSelected(imodel);
     this.setState({ isLoading: false });
   }
-
+  private async getIModelInfo_Bank(): Promise<{ contextId: string, imodelId: string }> {
+    // iTwinStack: Querying context depends on your implementation and can be different from Context Registry
+    // This method just returns ids from config, instead of querying them by names like in basic-viewport-app
+    const imodelId = Config.App.get("imjs_test_imodel_id");
+    const contextId = Config.App.get("imjs_test_context_id");
+    return { contextId, imodelId };
+  }
   private _onClickOpen = async () => {
     this.setState({ isLoading: true });
     let imodel: IModelConnection | undefined;
@@ -230,8 +236,10 @@ class OpenIModelButton extends React.PureComponent<OpenIModelButtonProps, OpenIM
         const offlineIModel = Config.App.getString("imjs_offline_imodel");
         imodel = await SnapshotConnection.openFile(offlineIModel);
       } else {
-        const info = await this.getIModelInfo();
-        imodel = await RemoteBriefcaseConnection.open(info.projectId, info.imodelId, OpenMode.Readonly);
+        // const info = await this.getIModelInfo();
+        // imodel = await RemoteBriefcaseConnection.open(info.projectId, info.imodelId, OpenMode.Readonly);
+        const info = await this.getIModelInfo_Bank();
+        imodel = await RemoteBriefcaseConnection.open(info.contextId, info.imodelId, OpenMode.ReadWrite);
       }
     } catch (e) {
       alert(e.message);

@@ -3,14 +3,32 @@
 * See LICENSE.md in the project root for license terms and full copyright notice.
 *--------------------------------------------------------------------------------------------*/
 import { IModelJsExpressServer } from "@bentley/express-server";
-import { BentleyCloudRpcManager } from "@bentley/imodeljs-common";
+import { BentleyCloudRpcManager, RpcConfiguration } from "@bentley/imodeljs-common";
 import { AppLoggerCategory } from "../common/LoggerCategory";
 import { Logger } from "@bentley/bentleyjs-core";
-import { IModelHost } from "@bentley/imodeljs-backend";
+import { IModelHost, IModelHostConfiguration } from "@bentley/imodeljs-backend";
 import { Presentation } from "@bentley/presentation-backend";
 
 import { getSupportedRpcs } from "../common/rpcs";
+import { AzureFileHandler, StorageServiceFileHandler } from "@bentley/backend-itwin-client";
+import { LocalhostHandler } from "./LocalhostHandler";
+import { IModelBankClient } from "@bentley/imodelhub-client";
+import { parseBasicAccessToken } from "./BasicAuthorization";
 
+
+function getFileHandlerFromConfig() {
+  //const storageType: string = Config.App.get("imjs_imodelbank_storage_type");
+    const storageType: string = "localhost";
+  switch (storageType) {
+    case "azure":
+      return new AzureFileHandler();
+    case "servicestorage":
+      return new StorageServiceFileHandler();
+    case "localhost":
+    default:
+      return new LocalhostHandler();
+  }
+}
 
 /**
  * Initializes Web Server backend
@@ -19,7 +37,19 @@ import { getSupportedRpcs } from "../common/rpcs";
 const webMain = async () => {  // tell BentleyCloudRpcManager which RPC interfaces to handle
   try {
     // Initialize iModelHost
-    await IModelHost.startup();
+    const config = new IModelHostConfiguration();
+
+    // iTwinStack: specify what kind of file handler is used by IModelBankClient
+    const fileHandler = getFileHandlerFromConfig();
+
+    // iTwinStack: setup IModelBankClient as imodelClient for IModelHost
+    // const url = Config.App.get("imjs_imodelbank_url");
+    const url ="http://localhost:4000"
+    config.imodelClient = new IModelBankClient(url, fileHandler);
+
+    // Initialize iModelHost
+    await IModelHost.startup(config);
+    RpcConfiguration.requestContext.deserialize = parseBasicAccessToken;
 
     // Initialize Presentation
     Presentation.initialize();
