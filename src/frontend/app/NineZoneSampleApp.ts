@@ -2,13 +2,12 @@
 * Copyright (c) Bentley Systems, Incorporated. All rights reserved.
 * See LICENSE.md in the project root for license terms and full copyright notice.
 *--------------------------------------------------------------------------------------------*/
-import { ClientRequestContext, Config, Guid, isElectronRenderer } from "@bentley/bentleyjs-core";
-import { BrowserAuthorizationCallbackHandler, BrowserAuthorizationClient, BrowserAuthorizationClientConfiguration, FrontendAuthorizationClient } from "@bentley/frontend-authorization-client";
+import { ClientRequestContext, Config, Guid } from "@bentley/bentleyjs-core";
+import { FrontendAuthorizationClient } from "@bentley/frontend-authorization-client";
 import { IModelBankClient } from "@bentley/imodelhub-client";
 import { IModelBankBasicAuthorizationClient } from "@bentley/imodelhub-client/lib/imodelbank/IModelBankBasicAuthorizationClient";
-import { BentleyCloudRpcManager, BentleyCloudRpcParams, DesktopAuthorizationClientConfiguration } from "@bentley/imodeljs-common";
-import { DesktopAuthorizationClient, FrontendRequestContext, IModelApp, IModelAppOptions } from "@bentley/imodeljs-frontend";
-import { UrlDiscoveryClient } from "@bentley/itwin-client";
+import { BentleyCloudRpcManager } from "@bentley/imodeljs-common";
+import { IModelApp, IModelAppOptions } from "@bentley/imodeljs-frontend";
 import { Presentation } from "@bentley/presentation-frontend";
 import { AppNotificationManager, UiFramework } from "@bentley/ui-framework";
 import { getSupportedRpcs } from "../../common/rpcs";
@@ -34,11 +33,6 @@ export class NineZoneSampleApp {
   public static get store(): AppStore { return this._appState.store; }
 
   public static async startup(): Promise<void> {
-
-    // Use the AppNotificationManager subclass from ui-framework to get prompts and messages
-    // const opts: IModelAppOptions = {};
-    // opts.notifications = new AppNotificationManager();
-    // opts.applicationVersion = "1.0.0";
     const opts: IModelAppOptions = {};
     opts.notifications = new AppNotificationManager();
     opts.applicationVersion = "1.0.0";
@@ -53,8 +47,6 @@ export class NineZoneSampleApp {
     
     await IModelApp.startup(opts);
     await IModelApp.authorizationClient?.signIn(new ClientRequestContext());
-    // initialize OIDC
-    //await NineZoneSampleApp.initializeOidc();
 
     // contains various initialization promises which need
     // to be fulfilled before the app is ready
@@ -85,44 +77,5 @@ export class NineZoneSampleApp {
     const rpcInterfaces = getSupportedRpcs();
     const rpcParams = { info: { title: "ninezone-sample-app", version: "v1.0" }, uriPrefix: "http://localhost:3001" };
     BentleyCloudRpcManager.initializeClient(rpcParams, rpcInterfaces);
-  }
-
-  private static async initializeOidc() {
-    const scope = Config.App.getString("imjs_browser_test_scope");
-
-    if (isElectronRenderer) {
-      const clientId = Config.App.getString("imjs_electron_test_client_id");
-      const redirectUri = Config.App.getString("imjs_electron_test_redirect_uri");
-      const oidcConfiguration: DesktopAuthorizationClientConfiguration = { clientId, redirectUri, scope: `${scope} offline_access` };
-      const desktopClient = new DesktopAuthorizationClient(oidcConfiguration);
-      await desktopClient.initialize(new ClientRequestContext());
-      IModelApp.authorizationClient = desktopClient;
-    } else {
-      const clientId = Config.App.getString("imjs_browser_test_client_id");
-      const redirectUri = Config.App.getString("imjs_browser_test_redirect_uri");
-      const postSignoutRedirectUri = Config.App.get("imjs_browser_test_post_signout_redirect_uri");
-      const oidcConfiguration: BrowserAuthorizationClientConfiguration = { clientId, redirectUri, postSignoutRedirectUri, scope: `${scope} imodeljs-router`, responseType: "code" };
-      await BrowserAuthorizationCallbackHandler.handleSigninCallback(oidcConfiguration.redirectUri);
-      IModelApp.authorizationClient = new BrowserAuthorizationClient(oidcConfiguration);
-      try {
-        await (NineZoneSampleApp.oidcClient as BrowserAuthorizationClient).signInSilent(new ClientRequestContext());
-      } catch (err) { }
-    }
-  }
-
-  private static async getConnectionInfo(): Promise<BentleyCloudRpcParams | undefined> {
-    const usedBackend = Config.App.getNumber("imjs_backend", UseBackend.Local);
-
-    if (usedBackend === UseBackend.GeneralPurpose) {
-      const urlClient = new UrlDiscoveryClient();
-      const requestContext = new FrontendRequestContext();
-      const orchestratorUrl = await urlClient.discoverUrl(requestContext, "iModelJsOrchestrator.K8S", undefined);
-      return { info: { title: "general-purpose-imodeljs-backend", version: "v2.0" }, uriPrefix: orchestratorUrl };
-    }
-
-    if (usedBackend === UseBackend.Local)
-      return undefined;
-
-    throw new Error(`Invalid backend "${usedBackend}" specified in configuration`);
   }
 }

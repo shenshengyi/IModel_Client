@@ -3,17 +3,23 @@
 * See LICENSE.md in the project root for license terms and full copyright notice.
 *--------------------------------------------------------------------------------------------*/
 import { IModelJsExpressServer } from "@bentley/express-server";
-import { BentleyCloudRpcManager, RpcConfiguration } from "@bentley/imodeljs-common";
+import { BentleyCloudRpcManager, RpcConfiguration, RpcManager } from "@bentley/imodeljs-common";
 import { AppLoggerCategory } from "../common/LoggerCategory";
 import { Logger } from "@bentley/bentleyjs-core";
-import { IModelHost, IModelHostConfiguration } from "@bentley/imodeljs-backend";
+import {  IModelHost, IModelHostConfiguration } from "@bentley/imodeljs-backend";
 import { Presentation } from "@bentley/presentation-backend";
 
-import { getSupportedRpcs } from "../common/rpcs";
 import { AzureFileHandler, StorageServiceFileHandler } from "@bentley/backend-itwin-client";
 import { LocalhostHandler } from "./LocalhostHandler";
 import { IModelBankClient } from "@bentley/imodelhub-client";
 import { parseBasicAccessToken } from "./BasicAuthorization";
+import { getSupportedRpcs } from "../common/rpcs";
+import SVTRpcInterface from "../common/SVTRpcInterface";
+import SVTRpcImpl from "./SVTRpcImpl";
+import { PropertiesRpcImpl, RobotWorldReadRpcImpl } from "./PropertiesRpcImpl";
+import { RobotWorldReadRpcInterface } from "../common/PropertiesRpcInterface";
+
+
 
 
 function getFileHandlerFromConfig() {
@@ -55,7 +61,9 @@ const webMain = async () => {  // tell BentleyCloudRpcManager which RPC interfac
     Presentation.initialize();
     // Get RPCs supported by this backend
     const rpcs = getSupportedRpcs();
-
+    PropertiesRpcImpl.register();
+    RpcManager.registerImpl(RobotWorldReadRpcInterface, RobotWorldReadRpcImpl);
+   RpcManager.registerImpl(SVTRpcInterface, SVTRpcImpl);
     const rpcConfig = BentleyCloudRpcManager.initializeImpl({ info: { title: "ninezone-sample-app", version: "v1.0" } }, rpcs);
 
     const port = Number(process.env.PORT || 3001);

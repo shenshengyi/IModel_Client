@@ -4,7 +4,7 @@
 *--------------------------------------------------------------------------------------------*/
 import { ViewState } from "@bentley/imodeljs-frontend";
 import {
-  ContentGroup, ContentLayoutDef, ContentViewManager, CoreTools, CustomItemDef, Frontstage,
+  ContentGroup, ContentLayoutDef, ContentViewManager, CoreTools, CustomItemDef, DefaultNavigationWidget, Frontstage,
   FrontstageProvider, IModelConnectedNavigationWidget, IModelConnectedViewSelector, IModelViewportControl,
   ItemList, StagePanel, SyncUiEventId, ToolWidget, UiFramework, Widget, WidgetState, Zone, ZoneState,
 } from "@bentley/ui-framework";
@@ -14,6 +14,7 @@ import { TableContent } from "../contentviews/TableContent";
 import { AppStatusBarWidget } from "../statusbars/AppStatusBar";
 import { PropertyGridWidget } from "../widgets/PropertyGridWidget";
 import { TreeWidget } from "../widgets/TreeWidget";
+import { TestFeature } from "./Feature";
 
 /* eslint-disable react/jsx-key */
 
@@ -41,7 +42,7 @@ export class SampleFrontstage extends FrontstageProvider {
         {
           classId: IModelViewportControl,
           applicationData: {
-            viewState: this.viewStates[0],
+            viewState: this.viewStates[5],
             iModelConnection: UiFramework.getIModelConnection(),
           },
         },
@@ -121,6 +122,20 @@ export class SampleFrontstage extends FrontstageProvider {
         rightPanel={
           <StagePanel
             allowedZones={[6, 9]}
+          />
+        }
+        viewNavigationTools={
+          <Zone
+            widgets={[
+              <Widget
+                isFreeform={true}
+                element={
+                  <DefaultNavigationWidget
+                    suffixVerticalItems={TestFeature.ItemLists}
+                  />
+                }
+              />,
+            ]}
           />
         }
       />
