@@ -1,8 +1,8 @@
 import { Config, Guid, Id64String } from "@bentley/bentleyjs-core";
-import { Angle, AngleSweep, Arc3d, IndexedPolyface, LineSegment3d, LineString3d, Loop, LowAndHighXYZ, Point3d, Range1d, Range3d, Ray3d, Vector3d, WritableXYAndZ, YawPitchRollAngles } from "@bentley/geometry-core";
+import { Angle, AngleSweep, Arc3d, CurveFactory, IndexedPolyface, LineSegment3d, LineString3d, Loop, LowAndHighXYZ, Point3d, Range1d, Range3d, Ray3d, Vector3d, WritableXYAndZ, YawPitchRollAngles } from "@bentley/geometry-core";
 import { MarkedHalfEdgeSt } from "@bentley/geometry-core/lib/topology/HalfEdgeMarkSet";
-import { calculateSolarDirectionFromAngles, Code, CodeProps, ColorByName, ColorDef, DisplayStyle3dSettings, ElementProps, GeometricElement3dProps, GeometryStreamBuilder, GeometryStreamProps, LightSettings, LightSettingsProps, RenderMode, RgbColor, ThematicDisplay, ThematicDisplayMode, ThematicDisplayProps, ThematicGradientColorScheme, ThematicGradientMode } from "@bentley/imodeljs-common";
-import { AuthorizedFrontendRequestContext, BeButtonEvent, BeWheelEvent, ElementEditor3d, ElementState, EventHandled, GeometricModel3dState, HitDetail, IModelApp, LocateFilterStatus, LocateResponse, ModelState, PrimitiveTool, SpatialViewState, StandardViewId, ViewState3d } from "@bentley/imodeljs-frontend";
+import { calculateSolarDirectionFromAngles, Code, CodeProps, ColorByName, ColorDef, DisplayStyle3dSettings, ElementProps, GeometricElement3dProps, GeometryStreamBuilder, GeometryStreamProps, LightSettings, LightSettingsProps, RenderMode, RgbColor, SubCategoryAppearance, ThematicDisplay, ThematicDisplayMode, ThematicDisplayProps, ThematicGradientColorScheme, ThematicGradientMode } from "@bentley/imodeljs-common";
+import { AuthorizedFrontendRequestContext, BeButtonEvent, BeWheelEvent, ElementEditor3d, ElementState, EventHandled, GeometricModel3dState, HitDetail, IModelApp, IModelConnection, LocateFilterStatus, LocateResponse, ModelState, PrimitiveTool, SpatialViewState, StandardViewId, ViewState3d } from "@bentley/imodeljs-frontend";
 import { CommandItemDef, ItemList, SavedView, SavedViewProps, UiFramework } from "@bentley/ui-framework";
 import ExportIFCInterface from "../../../common/ExportIFCInterface";
 import { PropertiesRpcInterface, RobotWorldReadRpcInterface } from "../../../common/PropertiesRpcInterface";
@@ -208,8 +208,6 @@ export class SelectSignalTool extends PrimitiveTool {
 
     const lightOrigin = lightRange.origin;
     const pillarOrigin = pillarRange.origin;
-    
-    //const dis = lightOrigin.distanceXY(pillarOrigin);
     const dis = this.Cal2Point3dDistance(lightOrigin, pillarOrigin);
     console.log(dis);
     const sin = pillarRangeMaxDistance / dis;
@@ -226,17 +224,51 @@ export class SelectSignalTool extends PrimitiveTool {
 
     const seg1 = LineSegment3d.create(lightOrigin, p1);
     const seg2 = LineSegment3d.create(lightOrigin, p2);
-    const arc = Arc3d.createXY(lightOrigin, 2 * dis);
+
     const p3 = seg1.fractionToPoint(2);
     const p4 = seg2.fractionToPoint(2);
     const seg3 = LineSegment3d.create(lightOrigin, p3);
     const seg4 = LineSegment3d.create(lightOrigin, p4);
-    const seg5 = LineSegment3d.create(p3, p4);
 
-    const loop = Loop.createArray([seg3,seg5,seg4]);
-    const geometryStreamBuilder = new GeometryStreamBuilder();
-    geometryStreamBuilder.appendGeometry(loop);
-    geometryStreamBuilder.appendGeometry(arc);
+    const p = this.points[0];
+    const vn = new Vector3d(p.x - lightOrigin.x, p.y - lightOrigin.y);
+    const cn = new Vector3d(vn.y, -vn.x);
+   const newArd = CurveFactory.createArcPointTangentPoint(lightOrigin, cn, p);
+    const loop2 = Loop.createArray([newArd!]);
+
+    //////////////////////////////////////////////////
+    const lightAngle = Math.PI / 6;
+    const targetPoint = this.points[0];
+    //中轴向量
+    const axisVec = new Vector3d(targetPoint.x - lightOrigin.x, targetPoint.y - lightOrigin.y,targetPoint.z - lightOrigin.z);
+   //光线的边界向量
+    const leftVec = axisVec.rotateXY(Angle.createRadians(lightAngle));
+    const rightVec = axisVec.rotateXY(Angle.createRadians(-lightAngle));
+    //光线的边界射线
+    const leftRay3d = Ray3d.create(lightOrigin, leftVec);
+    const rightRay3d = Ray3d.create(lightOrigin, rightVec);
+
+    //目标点在边界射线投影
+    const leftProjectPoint = leftRay3d.projectPointToRay(targetPoint);
+    const rightProjectPoitn = rightRay3d.projectPointToRay(targetPoint);
+
+    const s1 = LineSegment3d.create(lightOrigin, leftProjectPoint);
+    const s2 = LineSegment3d.create(lightOrigin, targetPoint);
+    const s3 = LineSegment3d.create(lightOrigin, rightProjectPoitn);
+    const arc = Arc3d.createCircularStartMiddleEnd(leftProjectPoint, targetPoint, rightProjectPoitn);
+    const lightLoop = Loop.createArray([s1,arc!,s3]);
+    /////////////////////////////////////////////////
+    const lightGeometryStreamBuilder = new GeometryStreamBuilder();
+    //  geometryStreamBuilder.appendGeometry(s1);
+    // geometryStreamBuilder.appendGeometry(s2);
+    // geometryStreamBuilder.appendGeometry(s3);
+   // geometryStreamBuilder.appendGeometry(arc!);
+    lightGeometryStreamBuilder.appendGeometry(lightLoop);
+    const obstacleGeometryStreamBuilder = new GeometryStreamBuilder();
+    obstacleGeometryStreamBuilder.appendGeometry(seg3);
+    obstacleGeometryStreamBuilder.appendGeometry(seg4);
+    // geometryStreamBuilder.appendGeometry(loop);
+    // geometryStreamBuilder.appendGeometry(loop2);
     // geometryStreamBuilder()
 
     // for (const p of this.points) {
@@ -254,81 +286,15 @@ export class SelectSignalTool extends PrimitiveTool {
 
     // const loop = Loop.createPolygon([lightOrigin, ...this.points]);
     // geometryStreamBuilder.appendGeometry(loop);
-    await ElementEdit(geometryStreamBuilder.geometryStream);
-    //信号灯id=0x2000000004d;
-    //柱子id = 0x2000000004b;
-    // const geometryStreamBuilder = new GeometryStreamBuilder();
-    // geometryStreamBuilder.appendGeometry(arc);
-    // await ElementEdit(geometryStreamBuilder.geometryStream);
-    //console.log(this.points);
-    // if (this.points.length !== 2) {
-    //   alert("选中的点个数不等于2");
-    //   return;
-    // }
-    // //柱子id;
-    // const id = "0x2000000004b";
-    // const PillarRange3d = await this.QueryElementRange3d(id)
-    // if (PillarRange3d === null) {
-    //   return;
-    // }
-    // console.log(PillarRange3d);
-    // const x = this.points[0].x;
-    // const y = this.points[0].y;
-    // const z = this.points[0].z;
-    // console.log(this.points[0]);
-    // if (PillarRange3d.containsXYZ(x,y,z)) {
-    //   console.log("包含");
-    // } else {
-    //   console.log("不包含");
-    // }
-   // PillarRange3d.scaleAboutCenterInPlace(10000);
-    // console.log(PillarRange3d);
-    // this.points[1].z = this.points[1].z;
-    // const ray: Ray3d = Ray3d.createStartEnd(this.points[0], this.points[1]);
-    //  console.log(ray);
-    // const r: Range1d = ray.intersectionWithRange3d(PillarRange3d);
-    // console.log("交叉结果如下所示:");
-    // if (r.isNull) {
-    //   console.log("没有交集");
-    // } else {
-    //   console.log("有交集");
-    // }
-    
-    // console.log(this.points[0]);
-    // const polyface = IndexedPolyface.create();
-    // for (const p of this.points) {
-    //   polyface.addPoint(p);
-    // }
-    // for (let i = 0; i < this.points.length; i++) {
-    //   polyface.addPointIndex(i);
-    // }
-    // polyface.terminateFacet();
-    // polyface.data.compress();
-   // const arc = await this.CreateArc(this.points[0]);
-    // const geometryStreamBuilder = new GeometryStreamBuilder();
-    // this.points[1].z = this.points[1].z + 2;
-    // const seg = LineSegment3d.create(this.points[0], this.points[1]);
-    //const radius = 1000;
-    // const vectorU = Vector3d.unitX(3000);
-    // const vectorV = Vector3d.unitY(3000);
-    // const arc2 = Arc3d.create(this.points[0], vectorU, vectorV, AngleSweep.createStartEndDegrees(0, 90));
-    // const arc2 = Arc3d.create(
-    //   this.points[0],
-    //   Vector3d.create(1, 0, 0),
-    //   Vector3d.create(0, 4, 0), AngleSweep.createStartEndDegrees(0, 90))!;
-
-
-//     arc3d.create (中心点坐标，vector0，vevtor90， 360度）
-// 其中的vector0你可以给成（半径,0,0），vector90给成(0,半径,0)
-    
-    // const arc = Arc3d.create(this.points[0], new Vector3d(3, 0, 0), new Vector3d(0, 3, 0));
-
-    // const line = LineString3d.create(this.points[0],this.points[1]);
-
-    // //const arc2 = Arc3d.createCenterNormalRadius(this.points[0], new Vector3d(0, 0, 1), 100);
-    // geometryStreamBuilder.appendGeometry(seg);
-    // // geometryStreamBuilder.appendGeometry(line);
-    // await ElementEdit(geometryStreamBuilder.geometryStream);
+    const lightGeom: GeomtryData = {
+      geom: lightGeometryStreamBuilder.geometryStream,
+      categoryAppearance:{ color: ColorDef.blue.tbgr }
+    };
+    const obstacleGeom: GeomtryData = {
+      geom: obstacleGeometryStreamBuilder.geometryStream,
+      categoryAppearance: { color: ColorDef.red.tbgr }
+    };
+    await ElementEdit([lightGeom,obstacleGeom]);
   }
   public onRestartTool(): void {
     const tool = new SelectSignalTool();
@@ -390,31 +356,49 @@ export class SelectSignalTool extends PrimitiveTool {
   }
 }
 
+interface GeomtryData
+{
+  geom: GeometryStreamProps;
+  categoryAppearance: SubCategoryAppearance.Props;
+}
+
 async function CreateGeometry(
+  iModel:IModelConnection,
   editor: ElementEditor3d,
   model: Id64String,
-  category: Id64String,
-  code: CodeProps,
-  g:GeometryStreamProps
+  geoms:GeomtryData[]
 ): Promise<void> {
-  const props3d: GeometricElement3dProps = {
+
+  const dictionaryModelId = await iModel.models.getDictionaryModel();
+  for (const g of geoms) {
+    const category = await iModel.editing.categories.createAndInsertSpatialCategory(
+    dictionaryModelId,
+    Guid.createValue(),
+    g.categoryAppearance
+    );
+    const cr = Code.createEmpty();
+    const code = new Code({
+    ...cr,
+      value: Guid.createValue(),
+    });
+    const props3d: GeometricElement3dProps = {
     classFullName: "Generic:PhysicalObject",
     model,
     category,
     code,
-    geom: g,
+    geom: g.geom,
     userLabel: "taiyang1",
     // placement: {
     //   origin: Point3d.createZero(),
     //   angles: YawPitchRollAngles.createDegrees(0, 0, 0),
     //   bbox: Range3d.fromJSON(),
     // },
-  };
-  return editor.createElement(props3d);
+    };
+   await editor.createElement(props3d);
+  } 
 }
 
-let myModel: string = "";
-async function ElementEdit(g:GeometryStreamProps) {
+async function ElementEdit(g:GeomtryData[]) {
   const iModel = UiFramework.getIModelConnection()!;
   const editor = await ElementEditor3d.start(iModel);
   const modelCode = await iModel.editing.codes.makeModelCode(
@@ -424,21 +408,7 @@ async function ElementEdit(g:GeometryStreamProps) {
   const model = await iModel.editing.models.createAndInsertPhysicalModel(
     modelCode
   );
-  myModel = model;
-  const dictionaryModelId = await iModel.models.getDictionaryModel();
-  const category = await iModel.editing.categories.createAndInsertSpatialCategory(
-    dictionaryModelId,
-    Guid.createValue(),
-    { color: ColorDef.blue.tbgr }
-  );
-
-  const cr = Code.createEmpty();
-  const code = new Code({
-    ...cr,
-    value: Guid.createValue(),
-  });
-
-  await CreateGeometry(editor, model, category, code,g);
+  await CreateGeometry(iModel,editor, model,g);
  // const r = new Range3d(0, 0, 0, 5, 5, 5);
   await editor.write();
   //await iModel.editing.updateProjectExtents(r);
