@@ -11,6 +11,7 @@ import { IModelApp, IModelAppOptions } from "@bentley/imodeljs-frontend";
 import { Presentation } from "@bentley/presentation-frontend";
 import { AppNotificationManager, UiFramework } from "@bentley/ui-framework";
 import { getSupportedRpcs } from "../../common/rpcs";
+import { SelectSignalTool } from "../app-ui/frontstages/Feature";
 import { AppState, AppStore } from "./AppState";
 
 /**
@@ -63,7 +64,7 @@ export class NineZoneSampleApp {
 
     // initialize UiFramework
     initPromises.push(UiFramework.initialize(this.store, IModelApp.i18n));
-
+    initPromises.push(NineZoneSampleApp.registerTool());
     // initialize Presentation
     initPromises.push(Presentation.initialize({
       activeLocale: IModelApp.i18n.languageList()[0],
@@ -72,7 +73,10 @@ export class NineZoneSampleApp {
     // the app is ready when all initialization promises are fulfilled
     await Promise.all(initPromises);
   }
-
+  private static async registerTool() {
+    await IModelApp.i18n.registerNamespace("NineZoneSample").readFinished;
+    SelectSignalTool.register(IModelApp.i18n.getNamespace("NineZoneSample"));
+  }
   private static async initializeRpc(): Promise<void> {
     const rpcInterfaces = getSupportedRpcs();
     const rpcParams = { info: { title: "ninezone-sample-app", version: "v1.0" }, uriPrefix: "http://localhost:3001" };

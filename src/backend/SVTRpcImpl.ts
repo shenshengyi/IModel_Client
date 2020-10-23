@@ -11,18 +11,17 @@ import SVTRpcInterface from "../common/SVTRpcInterface";
 export default class SVTRpcImpl extends SVTRpcInterface {
 
   public async readExternalSavedViews(bimFileName: string): Promise<string> {
-    // if (MobileRpcConfiguration.isMobileBackend && process.env.DOCS) {
-    //   const docPath = process.env.DOCS;
-    //   bimFileName = path.join(docPath, bimFileName);
-    // }
+    if (MobileRpcConfiguration.isMobileBackend && process.env.DOCS) {
+      const docPath = process.env.DOCS;
+      bimFileName = path.join(docPath, bimFileName);
+    }
 
-    // const esvFileName = this.createEsvFilename(bimFileName);
-    // if (!fs.existsSync(esvFileName))
-    //   return "";
+    const esvFileName = this.createEsvFilename(bimFileName);
+    if (!fs.existsSync(esvFileName))
+      return "";
 
-    // const jsonStr = fs.readFileSync(esvFileName).toString();
-    // return jsonStr ?? "";
-      return bimFileName + "2020";
+    const jsonStr = fs.readFileSync(esvFileName).toString();
+    return jsonStr ?? "";
   }
 
   public async writeExternalSavedViews(bimFileName: string, namedViews: string): Promise<void> {

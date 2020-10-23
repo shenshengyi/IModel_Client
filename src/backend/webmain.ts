@@ -5,11 +5,11 @@
 import { IModelJsExpressServer } from "@bentley/express-server";
 import { BentleyCloudRpcManager, RpcConfiguration, RpcManager } from "@bentley/imodeljs-common";
 import { AppLoggerCategory } from "../common/LoggerCategory";
-import { Logger } from "@bentley/bentleyjs-core";
+import { ClientRequestContext, Guid, Logger } from "@bentley/bentleyjs-core";
 import {  IModelHost, IModelHostConfiguration } from "@bentley/imodeljs-backend";
 import { Presentation } from "@bentley/presentation-backend";
 
-import { AzureFileHandler, StorageServiceFileHandler } from "@bentley/backend-itwin-client";
+import { AgentAuthorizationClient, AzureFileHandler, StorageServiceFileHandler } from "@bentley/backend-itwin-client";
 import { LocalhostHandler } from "./LocalhostHandler";
 import { IModelBankClient } from "@bentley/imodelhub-client";
 import { parseBasicAccessToken } from "./BasicAuthorization";
@@ -18,7 +18,21 @@ import SVTRpcInterface from "../common/SVTRpcInterface";
 import SVTRpcImpl from "./SVTRpcImpl";
 import { PropertiesRpcImpl, RobotWorldReadRpcImpl } from "./PropertiesRpcImpl";
 import { RobotWorldReadRpcInterface } from "../common/PropertiesRpcInterface";
+import ExportImp from "./ExportIFCImp";
+import { BasicAccessToken, IModelBankBasicAuthorizationClient } from "@bentley/imodelhub-client/lib/imodelbank/IModelBankBasicAuthorizationClient";
+import { AccessToken, AuthorizationClient, AuthorizedClientRequestContext, UserInfo } from "@bentley/itwin-client";
 
+const email = "test";
+const password = "test";
+
+export function createRequestContext() {
+  return new AuthorizedClientRequestContext(
+    BasicAccessToken.fromCredentials({
+      email,
+      password,
+    })
+  );
+}
 
 
 
@@ -36,6 +50,31 @@ function getFileHandlerFromConfig() {
   }
 }
 
+ export class MockAccessToken extends AccessToken {
+  public constructor() {
+    super("");
+  }
+
+  public getUserInfo(): UserInfo | undefined {
+    const id = "test";
+    const email = { id: "test" };
+    // const profile = { firstName: "test", lastName: "user" };
+    // const organization = { id: "fefac5b-bcad-488b-aed2-df27bffe5786", name: "Bentley" };
+    // const featureTracking = { ultimateSite: "1004144426", usageCountryIso: "US" };
+    //return new UserInfo(id, email, profile, organization, featureTracking);
+    return new UserInfo(id, email);
+  }
+
+  public toTokenString() { return ""; }
+}
+
+const authorizationClient: AuthorizationClient = {
+  getAccessToken: async (_requestContext: ClientRequestContext): Promise<AccessToken> => {
+    return new MockAccessToken();
+  },
+  
+      isAuthorized: true,
+};
 /**
  * Initializes Web Server backend
  */
@@ -56,14 +95,15 @@ const webMain = async () => {  // tell BentleyCloudRpcManager which RPC interfac
     // Initialize iModelHost
     await IModelHost.startup(config);
     RpcConfiguration.requestContext.deserialize = parseBasicAccessToken;
-
+    //const email = "test";
+    //const password = "test";
+    //IModelHost.authorizationClient = new IModelBankBasicAuthorizationClient({ id: Guid.createValue() }, { email, password });
+    //IModelHost.authorizationClient = authorizationClient;
     // Initialize Presentation
     Presentation.initialize();
     // Get RPCs supported by this backend
     const rpcs = getSupportedRpcs();
-    PropertiesRpcImpl.register();
-    RpcManager.registerImpl(RobotWorldReadRpcInterface, RobotWorldReadRpcImpl);
-   RpcManager.registerImpl(SVTRpcInterface, SVTRpcImpl);
+    registerRPCImp();
     const rpcConfig = BentleyCloudRpcManager.initializeImpl({ info: { title: "ninezone-sample-app", version: "v1.0" } }, rpcs);
 
     const port = Number(process.env.PORT || 3001);
@@ -78,3 +118,10 @@ const webMain = async () => {  // tell BentleyCloudRpcManager which RPC interfac
 
 // eslint-disable-next-line @typescript-eslint/no-floating-promises
 webMain();
+
+function registerRPCImp() {
+    PropertiesRpcImpl.register();
+    RpcManager.registerImpl(RobotWorldReadRpcInterface, RobotWorldReadRpcImpl);
+    RpcManager.registerImpl(SVTRpcInterface, SVTRpcImpl);
+    ExportImp.register();
+}

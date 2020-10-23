@@ -4,6 +4,7 @@
 *--------------------------------------------------------------------------------------------*/
 import { Editor3dRpcInterface, IModelReadRpcInterface, IModelTileRpcInterface, IModelWriteRpcInterface, RpcInterfaceDefinition, SnapshotIModelRpcInterface } from "@bentley/imodeljs-common";
 import { PresentationRpcInterface } from "@bentley/presentation-common";
+import ExportIFCInterface from "./ExportIFCInterface";
 import { PropertiesRpcInterface, RobotWorldReadRpcInterface } from "./PropertiesRpcInterface";
 import SVTRpcInterface from "./SVTRpcInterface";
 
@@ -22,5 +23,6 @@ export function getSupportedRpcs(): RpcInterfaceDefinition[] {
     SVTRpcInterface,
     PropertiesRpcInterface,
     RobotWorldReadRpcInterface,
+    ExportIFCInterface,
   ];
 }

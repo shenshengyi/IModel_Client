@@ -33,7 +33,7 @@ export class SampleFrontstage extends FrontstageProvider {
 
     // Create the content layouts.
     this._contentLayoutDef = new ContentLayoutDef({
-      horizontalSplit: { percentage: 0.75, top: 0, bottom: 1 },
+      // horizontalSplit: { percentage: 0.75, top: 0, bottom: 1 },
     });
 
     // Create the content group.
@@ -46,12 +46,12 @@ export class SampleFrontstage extends FrontstageProvider {
             iModelConnection: UiFramework.getIModelConnection(),
           },
         },
-        {
-          classId: TableContent,
-          applicationData: {
-            iModelConnection: UiFramework.getIModelConnection(),
-          },
-        },
+        // {
+        //   classId: TableContent,
+        //   applicationData: {
+        //     iModelConnection: UiFramework.getIModelConnection(),
+        //   },
+        // },
       ],
     });
   }
