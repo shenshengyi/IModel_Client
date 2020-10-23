@@ -1,5 +1,5 @@
 import { Config, Guid, Id64String } from "@bentley/bentleyjs-core";
-import { Angle, AngleSweep, Arc3d, CurveFactory, IndexedPolyface, LineSegment3d, LineString3d, Loop, LowAndHighXYZ, Point3d, Range1d, Range3d, Ray3d, Vector3d, WritableXYAndZ, YawPitchRollAngles } from "@bentley/geometry-core";
+import { Angle, AngleSweep, AnyRegion, Arc3d, CurveCurve, CurveFactory, CurveLocationDetailArrayPair, CurvePrimitive, IndexedPolyface, LineSegment3d, LineString3d, Loop, LowAndHighXYZ, Point3d, Range1d, Range3d, Ray3d, RegionBinaryOpType, RegionOps, Vector3d, WritableXYAndZ, YawPitchRollAngles } from "@bentley/geometry-core";
 import { MarkedHalfEdgeSt } from "@bentley/geometry-core/lib/topology/HalfEdgeMarkSet";
 import { calculateSolarDirectionFromAngles, Code, CodeProps, ColorByName, ColorDef, DisplayStyle3dSettings, ElementProps, GeometricElement3dProps, GeometryStreamBuilder, GeometryStreamProps, LightSettings, LightSettingsProps, RenderMode, RgbColor, SubCategoryAppearance, ThematicDisplay, ThematicDisplayMode, ThematicDisplayProps, ThematicGradientColorScheme, ThematicGradientMode } from "@bentley/imodeljs-common";
 import { AuthorizedFrontendRequestContext, BeButtonEvent, BeWheelEvent, ElementEditor3d, ElementState, EventHandled, GeometricModel3dState, HitDetail, IModelApp, IModelConnection, LocateFilterStatus, LocateResponse, ModelState, PrimitiveTool, SpatialViewState, StandardViewId, ViewState3d } from "@bentley/imodeljs-frontend";
@@ -181,10 +181,6 @@ export class SelectSignalTool extends PrimitiveTool {
     this.createMesh();
     return EventHandled.No;
   }
-  private async CreateArc(center:Point3d) {
-    const arc: Arc3d = Arc3d.create(center, new Vector3d(3, 3, 0), new Vector3d(-500, 500, 0));
-    return arc;
-  }
   private Cal2Point3dDistance(p1:Point3d,p2:Point3d) {
     const dis = (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z);
     return Math.sqrt(dis);
@@ -225,17 +221,15 @@ export class SelectSignalTool extends PrimitiveTool {
     const seg1 = LineSegment3d.create(lightOrigin, p1);
     const seg2 = LineSegment3d.create(lightOrigin, p2);
 
-    const p3 = seg1.fractionToPoint(2);
-    const p4 = seg2.fractionToPoint(2);
+    const p3 = seg1.fractionToPoint(10);
+    const p4 = seg2.fractionToPoint(10);
     const seg3 = LineSegment3d.create(lightOrigin, p3);
     const seg4 = LineSegment3d.create(lightOrigin, p4);
 
     const p = this.points[0];
     const vn = new Vector3d(p.x - lightOrigin.x, p.y - lightOrigin.y);
     const cn = new Vector3d(vn.y, -vn.x);
-   const newArd = CurveFactory.createArcPointTangentPoint(lightOrigin, cn, p);
-    const loop2 = Loop.createArray([newArd!]);
-
+    const newArd = CurveFactory.createArcPointTangentPoint(lightOrigin, cn, p);
     //////////////////////////////////////////////////
     const lightAngle = Math.PI / 6;
     const targetPoint = this.points[0];
@@ -256,45 +250,44 @@ export class SelectSignalTool extends PrimitiveTool {
     const s2 = LineSegment3d.create(lightOrigin, targetPoint);
     const s3 = LineSegment3d.create(lightOrigin, rightProjectPoitn);
     const arc = Arc3d.createCircularStartMiddleEnd(leftProjectPoint, targetPoint, rightProjectPoitn);
-    const lightLoop = Loop.createArray([s1,arc!,s3]);
-    /////////////////////////////////////////////////
+   
+    
+    const intersePointLeft: CurveLocationDetailArrayPair = CurveCurve.intersectionXYZ(newArd!, true, seg3, true);
+    const intersePointRight: CurveLocationDetailArrayPair = CurveCurve.intersectionXYZ(newArd!, true, seg4, true);
+
+    const geomDatas: GeomtryData[] = [];
+    let lightLoop = Loop.createArray([s1, arc!, s3]);
+    let loop: AnyRegion | undefined = undefined;
+    if (intersePointLeft.dataA.length > 0 && intersePointRight.dataA) {
+      const pi1 = intersePointLeft.dataA[0].point;
+      const pi2 = intersePointRight.dataA[0].point;
+      const si1 = LineSegment3d.create(lightOrigin, pi1);
+      const si2 = LineSegment3d.create(lightOrigin, pi2);
+      
+      const psi1 = si1.fractionToPoint(10);
+      const psi2 = si2.fractionToPoint(10);
+      const obstacleLoop = Loop.createPolygon([p1, p2, psi2, psi1]);
+      loop = RegionOps.regionBooleanXY(lightLoop,obstacleLoop,RegionBinaryOpType.AMinusB);
+      // const obstacleGeometryStreamBuilder = new GeometryStreamBuilder();
+      // obstacleGeometryStreamBuilder.appendGeometry(obstacleLoop);
+      // geomDatas.push({
+      // geom: obstacleGeometryStreamBuilder.geometryStream,
+      // categoryAppearance:{ priority:0,color: ColorDef.black.tbgr }
+    // });
+    }
     const lightGeometryStreamBuilder = new GeometryStreamBuilder();
-    //  geometryStreamBuilder.appendGeometry(s1);
-    // geometryStreamBuilder.appendGeometry(s2);
-    // geometryStreamBuilder.appendGeometry(s3);
-   // geometryStreamBuilder.appendGeometry(arc!);
-    lightGeometryStreamBuilder.appendGeometry(lightLoop);
-    const obstacleGeometryStreamBuilder = new GeometryStreamBuilder();
-    obstacleGeometryStreamBuilder.appendGeometry(seg3);
-    obstacleGeometryStreamBuilder.appendGeometry(seg4);
-    // geometryStreamBuilder.appendGeometry(loop);
-    // geometryStreamBuilder.appendGeometry(loop2);
-    // geometryStreamBuilder()
-
-    // for (const p of this.points) {
-    // const ray: Ray3d = Ray3d.createStartEnd(lightOrigin, p);
-    // const seg: LineSegment3d = LineSegment3d.create(lightOrigin, p);
-    // const r1d: Range1d = ray.intersectionWithRange3d(range);
-    // if (r1d.isNull) {
-    //   //alert("没有相交");
-    // } else {
-    //  // alert("相交");
-    //   console.log(r1d);
-    //   }
-    //   // geometryStreamBuilder.appendGeometry(seg);
-    // }
-
-    // const loop = Loop.createPolygon([lightOrigin, ...this.points]);
-    // geometryStreamBuilder.appendGeometry(loop);
-    const lightGeom: GeomtryData = {
+    if (loop) {
+      lightGeometryStreamBuilder.appendGeometry(loop);
+    } else {
+      lightGeometryStreamBuilder.appendGeometry(lightLoop);
+    }
+    geomDatas.push({
       geom: lightGeometryStreamBuilder.geometryStream,
-      categoryAppearance:{ color: ColorDef.blue.tbgr }
-    };
-    const obstacleGeom: GeomtryData = {
-      geom: obstacleGeometryStreamBuilder.geometryStream,
-      categoryAppearance: { color: ColorDef.red.tbgr }
-    };
-    await ElementEdit([lightGeom,obstacleGeom]);
+      categoryAppearance: {invisible:false, priority:2,color: ColorDef.fromString("rgb(255,255,0)").toJSON() }
+    });
+    await ElementEdit(geomDatas);
+    // 最后两个就是控制透明度的，一个是控制边界线透明度的，一个是控制填充色透明度的
+    
   }
   public onRestartTool(): void {
     const tool = new SelectSignalTool();
