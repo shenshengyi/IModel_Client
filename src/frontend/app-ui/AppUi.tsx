@@ -4,6 +4,7 @@
 *--------------------------------------------------------------------------------------------*/
 import { IModelConnection, ViewState } from "@bentley/imodeljs-frontend";
 import {  BackstageManager, CommandItemDef, ConfigurableUiManager, FrontstageManager, SyncUiEventDispatcher, UiFramework } from "@bentley/ui-framework";
+import { TestDeSerializationView } from "./frontstages/Feature";
 import { SampleFrontstage } from "./frontstages/SampleFrontstage";
 import { SampleFrontstage2 } from "./frontstages/SampleFrontstage2";
 
@@ -38,6 +39,7 @@ export class AppUi {
     // eslint-disable-next-line @typescript-eslint/no-floating-promises
     FrontstageManager.setActiveFrontstageDef(frontstageProvider.frontstageDef).then(() => {
       // Frontstage is ready
+      TestDeSerializationView();
     });
 
     // We create a FrontStage that contains the views that we want.

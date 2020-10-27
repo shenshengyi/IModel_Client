@@ -32,17 +32,84 @@ export class TestFeature {
     TestFeature.CreateCommand("TestShadow", "测试阴影", TestShadow),
     TestFeature.CreateCommand("AdjuctShadowDirectrion", "测试光照方向", AdjuctShadowDirectrion),
     TestFeature.CreateCommand("TestSerializationView", "保存当前视图至外部文件", TestSerializationView),
-     TestFeature.CreateCommand("ExportIFC", "导出IFC", ExportIFC)
+    TestFeature.CreateCommand("ExportIFC", "导出IFC", ExportIFC),
+    TestFeature.CreateCommand("DeleteElement", "删除指定元素", DeleteElement),
   ]);
 }
-async function TestSerializationView() {
+export class DeleteElementTool extends PrimitiveTool {
+    public static toolId = "DeleteElementTool";
+    private id: string = '';
+    public onPostInstall() {
+        super.onPostInstall();
+        this.setupAndPromptForNextAction();
+    }
+    public setupAndPromptForNextAction(): void {
+        IModelApp.notifications.outputPromptByKey(
+        "SelectSignalTool run"
+        );
+    }
+    public async filterHit(
+        _hit: HitDetail,
+        _out?: LocateResponse
+    ): Promise<LocateFilterStatus> {
+        return LocateFilterStatus.Accept;
+    }
+    async getToolTip(_hit: HitDetail): Promise<HTMLElement | string> {
+        return "hello,NBA2020";
+    }
+    public async onMouseWheel(_ev: BeWheelEvent): Promise<EventHandled> {
+        return EventHandled.No;
+    }
+    public async onDataButtonDown(ev: BeButtonEvent): Promise<EventHandled> {
+        await IModelApp.locateManager.doLocate(
+        new LocateResponse(),
+        true,
+        ev.point,
+        ev.viewport,
+        ev.inputSource
+        );
+        const hit = IModelApp.locateManager.currHit;
+        if (hit !== undefined) {
+        const props = await this.iModel.elements.getProps(hit.sourceId);
+            if (props && props.length > 0) {     
+                this.id = hit.sourceId;
+            }
+        } 
+        return EventHandled.No;
+    }
+    public async onResetButtonUp(_ev: BeButtonEvent): Promise<EventHandled> {
+        await this.DeleteElement();
+        IModelApp.toolAdmin.startDefaultTool();
+        return EventHandled.No;
+    }
+    private async DeleteElement() {
+        const id = this.id;
+        await DeleteElementImp(id);
+    }
+    public onRestartTool(): void {
+        const tool = new DeleteElementTool();
+        if (!tool.run()) this.exitTool();
+    }
+}
+async function DeleteElementImp(id:string) {
+    const imodel = UiFramework.getIModelConnection()!;
+    await imodel.editing.deleteElements([id]);
+    imodel.saveChanges("delement element id =" + id);
+    
+    await TestSerializationView();
+    await TestDeSerializationView();
+}
+export async function DeleteElement() {
+      IModelApp.tools.run(DeleteElementTool.toolId); 
+}
+export async function TestSerializationView() {
   const vp = IModelApp.viewManager.selectedView!.view;
   const viewProp = SavedView.viewStateToProps(vp);
   const strViewProp = JSON.stringify(viewProp);
   const savedViewFilePath = Config.App.get("imjs_savedview_file");
   await SVTRpcInterface.getClient().writeExternalSavedViews(savedViewFilePath,strViewProp);
 }
-async function TestDeSerializationView() {
+export async function TestDeSerializationView() {
   const savedViewFilePath = Config.App.get("imjs_savedview_file");
   const strViewProp = await SVTRpcInterface.getClient().readExternalSavedViews(savedViewFilePath);
   const vp = IModelApp.viewManager.selectedView!;
@@ -164,6 +231,7 @@ export class SelectSignalTool extends PrimitiveTool {
     if (hit !== undefined) {
     const props = await this.iModel.elements.getProps(hit.sourceId);
       if (props && props.length > 0) {
+        // alert(hit.sourceId);
         //this.points.push(ev.point);
         //alert(hit.sourceId);
        // this.QuerySignal(hit.sourceId);
@@ -191,9 +259,13 @@ export class SelectSignalTool extends PrimitiveTool {
       return;
     }
     //信号灯id=0x2000000004d;
-    const lightId = "0x2000000004d";
+    //测试圆柱子;
+    // const lightId = "0x2000000004d";
+    // const pillarId = "0x2000000004b";
+    //测试方柱子;
+    const lightId = "0x2000000004e";
+    const pillarId = "0x2000000004c";
     const lightRange = await this.QueryElementRange3d(lightId);
-    const pillarId = "0x2000000004b";
     const pillarRange = await this.QueryElementRange3d(pillarId);
     if (!lightRange || !pillarRange) {
       alert("灯或者柱子的范围不合法");
@@ -203,7 +275,12 @@ export class SelectSignalTool extends PrimitiveTool {
     const pillarRangeMaxDistance = this.CalRangeMaxDistance(pillarRange.ranger);
 
     const lightOrigin = lightRange.origin;
-    const pillarOrigin = pillarRange.origin;
+    //圆柱子
+    //const pillarOrigin = new Point3d(pillarRange.origin.x, pillarRange.origin.y);
+    //方柱子需要修改中心坐标;
+    const pillarOrigin = new Point3d(pillarRange.origin.x - 0.1,pillarRange.origin.y - 0.1);
+    const testArc = Arc3d.createXY(pillarOrigin, pillarRangeMaxDistance);
+    console.log(pillarOrigin);
     const dis = this.Cal2Point3dDistance(lightOrigin, pillarOrigin);
     console.log(dis);
     const sin = pillarRangeMaxDistance / dis;
@@ -221,8 +298,8 @@ export class SelectSignalTool extends PrimitiveTool {
     const seg1 = LineSegment3d.create(lightOrigin, p1);
     const seg2 = LineSegment3d.create(lightOrigin, p2);
 
-    const p3 = seg1.fractionToPoint(10);
-    const p4 = seg2.fractionToPoint(10);
+    const p3 = seg1.fractionToPoint(4);
+    const p4 = seg2.fractionToPoint(4);
     const seg3 = LineSegment3d.create(lightOrigin, p3);
     const seg4 = LineSegment3d.create(lightOrigin, p4);
 
@@ -258,7 +335,7 @@ export class SelectSignalTool extends PrimitiveTool {
     const geomDatas: GeomtryData[] = [];
     let lightLoop = Loop.createArray([s1, arc!, s3]);
     let loop: AnyRegion | undefined = undefined;
-    if (intersePointLeft.dataA.length > 0 && intersePointRight.dataA) {
+    if ( intersePointLeft && intersePointLeft.dataA.length > 0 && intersePointRight.dataA.length > 0) {
       const pi1 = intersePointLeft.dataA[0].point;
       const pi2 = intersePointRight.dataA[0].point;
       const si1 = LineSegment3d.create(lightOrigin, pi1);
@@ -267,18 +344,16 @@ export class SelectSignalTool extends PrimitiveTool {
       const psi1 = si1.fractionToPoint(10);
       const psi2 = si2.fractionToPoint(10);
       const obstacleLoop = Loop.createPolygon([p1, p2, psi2, psi1]);
-      loop = RegionOps.regionBooleanXY(lightLoop,obstacleLoop,RegionBinaryOpType.AMinusB);
-      // const obstacleGeometryStreamBuilder = new GeometryStreamBuilder();
-      // obstacleGeometryStreamBuilder.appendGeometry(obstacleLoop);
-      // geomDatas.push({
-      // geom: obstacleGeometryStreamBuilder.geometryStream,
-      // categoryAppearance:{ priority:0,color: ColorDef.black.tbgr }
-    // });
+      const intersection = RegionOps.regionBooleanXY(lightLoop, obstacleLoop, RegionBinaryOpType.Intersection);	
+      if (intersection) {
+        loop = RegionOps.regionBooleanXY(lightLoop,intersection,RegionBinaryOpType.AMinusB);
+      }
     }
     const lightGeometryStreamBuilder = new GeometryStreamBuilder();
     if (loop) {
       lightGeometryStreamBuilder.appendGeometry(loop);
     } else {
+      alert("lightLoop");
       lightGeometryStreamBuilder.appendGeometry(lightLoop);
     }
     geomDatas.push({
@@ -294,7 +369,10 @@ export class SelectSignalTool extends PrimitiveTool {
     if (!tool.run()) this.exitTool();
   }
   private CalRangeMaxDistance(range: Range3d): number{
-    const maxDistance = Math.max(range.low.x, range.low.y, range.high.x, range.high.y);
+    //圆柱子;
+    //const maxDistance = Math.max(range.low.x, range.low.y, range.high.x, range.high.y)/1.8;
+    //方柱子;
+    const maxDistance = Math.max(range.xLength(), range.yLength())/2;
     return maxDistance;
   }
   private async QueryElementRange3d(id: string) {
@@ -309,43 +387,12 @@ export class SelectSignalTool extends PrimitiveTool {
           const box: Readonly<LowAndHighXYZ> = place.bbox;
           const ranger = Range3d.fromJSON(box);
           const origin = Point3d.fromJSON(place.origin);
+          console.log(geom);
           return {ranger,origin};
         }
       }
     }
     return null;
-  }
-  private async QuerySignal(id: string) {
-    const imodel = UiFramework.getIModelConnection()!;
-    const elementprops = await imodel.elements.getProps(id);
-    if (elementprops && elementprops.length > 0) {
-      const eleProps = elementprops[0];
-      const geom: GeometricElement3dProps = eleProps as GeometricElement3dProps;
-      if (geom && geom.placement) {
-        const place = geom.placement;
-        if (place.bbox) {
-          const box: Readonly<LowAndHighXYZ> = place.bbox;
-          console.log(box);
-          let ranger = Range3d.fromJSON(box);
-        
-          console.log(ranger);
-          console.log(place.origin); 
-          const origin = Point3d.fromJSON(place.origin);
-          const MaxX = Math.max(ranger.low.x, ranger.low.y, ranger.high.x, ranger.high.y);
-          this.points.push(origin);
-
-          console.log("最大范围:"+MaxX.toString());
-          // const p = Point3d.fromJSON(place.origin);
-          // this.points.push(p);
-          // console.log(p);
-          // const p: Point3d = ranger.center;
-          // // p.scaleInPlace(10000);
-          // // this.points.push(p);
-          // console.log(ranger);
-          //console.log(place.origin);
-        }
-      }
-    }
   }
 }
 
@@ -433,6 +480,8 @@ async function ElementEdit(g:GeomtryData[]) {
   IModelApp.viewManager.selectedView!.changeView(view3d);
   const vp2 = IModelApp.viewManager.selectedView!;
   vp2.addViewedModels(proIds);
+
+  await TestSerializationView();
 }
 
 async function  ExportIFC() {
