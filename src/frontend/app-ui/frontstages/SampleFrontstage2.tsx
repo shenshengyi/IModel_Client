@@ -49,7 +49,7 @@ export class SampleFrontstage2 extends FrontstageProvider {
         {
           classId: IModelViewportControl,
           applicationData: {
-            viewState: this.viewStates[0],
+            viewState: this.viewStates[2],
             iModelConnection: UiFramework.getIModelConnection(),
           },
         },

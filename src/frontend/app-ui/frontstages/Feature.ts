@@ -1,8 +1,8 @@
 import { Config, Guid, Id64String } from "@bentley/bentleyjs-core";
-import { Angle, AngleSweep, AnyRegion, Arc3d, CurveCurve, CurveFactory, CurveLocationDetailArrayPair, CurvePrimitive, IndexedPolyface, LineSegment3d, LineString3d, Loop, LowAndHighXYZ, Point3d, Range1d, Range3d, Ray3d, RegionBinaryOpType, RegionOps, Vector3d, WritableXYAndZ, YawPitchRollAngles } from "@bentley/geometry-core";
+import { Angle, AngleSweep, AnyRegion, Arc3d, Box, CurveCurve, CurveFactory, CurveLocationDetailArrayPair, CurvePrimitive, IndexedPolyface, LineSegment3d, LineString3d, Loop, LowAndHighXYZ, ParityRegion, Point3d, PolyfaceBuilder, Range1d, Range3d, Ray3d, RegionBinaryOpType, RegionOps, StrokeOptions, Transform, UnionRegion, Vector3d, WritableXYAndZ, YawPitchRollAngles } from "@bentley/geometry-core";
 import { MarkedHalfEdgeSt } from "@bentley/geometry-core/lib/topology/HalfEdgeMarkSet";
 import { calculateSolarDirectionFromAngles, Code, CodeProps, ColorByName, ColorDef, DisplayStyle3dSettings, ElementProps, GeometricElement3dProps, GeometryStreamBuilder, GeometryStreamProps, LightSettings, LightSettingsProps, RenderMode, RgbColor, SubCategoryAppearance, ThematicDisplay, ThematicDisplayMode, ThematicDisplayProps, ThematicGradientColorScheme, ThematicGradientMode } from "@bentley/imodeljs-common";
-import { AuthorizedFrontendRequestContext, BeButtonEvent, BeWheelEvent, ElementEditor3d, ElementState, EventHandled, GeometricModel3dState, HitDetail, IModelApp, IModelConnection, LocateFilterStatus, LocateResponse, ModelState, PrimitiveTool, SpatialViewState, StandardViewId, ViewState3d } from "@bentley/imodeljs-frontend";
+import { AuthorizedFrontendRequestContext, BeButtonEvent, BeWheelEvent, DecorateContext, Decorator, ElementEditor3d, ElementState, EventHandled, GeometricModel3dState, GraphicType, HitDetail, IModelApp, IModelConnection, LocateFilterStatus, LocateResponse, ModelState, PrimitiveTool, SpatialViewState, StandardViewId, ViewState3d } from "@bentley/imodeljs-frontend";
 import { CommandItemDef, ItemList, SavedView, SavedViewProps, UiFramework } from "@bentley/ui-framework";
 import ExportIFCInterface from "../../../common/ExportIFCInterface";
 import { PropertiesRpcInterface, RobotWorldReadRpcInterface } from "../../../common/PropertiesRpcInterface";
@@ -68,11 +68,12 @@ export class DeleteElementTool extends PrimitiveTool {
         ev.viewport,
         ev.inputSource
         );
-        const hit = IModelApp.locateManager.currHit;
+      const hit = IModelApp.locateManager.currHit;
         if (hit !== undefined) {
         const props = await this.iModel.elements.getProps(hit.sourceId);
             if (props && props.length > 0) {     
-                this.id = hit.sourceId;
+              this.id = hit.sourceId;
+              alert(hit.sourceId);
             }
         } 
         return EventHandled.No;
@@ -159,14 +160,31 @@ async function  TestSmoothShade() {
 //   }
 
 }
-async function TestShadow() {
+export async function TestShadow() {
+  const imodel = UiFramework.getIModelConnection()!;
+  const models = await imodel.models.queryProps({ from: GeometricModel3dState.classFullName });
+  const modelIds: string[] = [];
+  for (const model of models) {
+    modelIds.push(model.id!);
+  }
+    const viewCreator3d: ViewCreator3d = new ViewCreator3d(imodel);
+  let view3d = await viewCreator3d.createDefaultView(
+    {
+      cameraOn: true,
+      skyboxOn: true,
+      useSeedView: true,
+      standardViewId: StandardViewId.Front,
+    },
+    modelIds
+  );
+
   const vp = IModelApp.viewManager.selectedView!;
   let vf = vp.viewFlags.clone();
   vf.shadows = !vf.shadows;
+  vf.renderMode = RenderMode.SmoothShade;
   vp.viewFlags = vf;
-
-
-
+  vp.changeView(view3d);
+  await TestDeSerializationView();
 }
 async function RunSelectSignalTool() {
   IModelApp.tools.run(SelectSignalTool.toolId); 
@@ -231,29 +249,141 @@ export class SelectSignalTool extends PrimitiveTool {
     if (hit !== undefined) {
     const props = await this.iModel.elements.getProps(hit.sourceId);
       if (props && props.length > 0) {
-        // alert(hit.sourceId);
-        //this.points.push(ev.point);
-        //alert(hit.sourceId);
-       // this.QuerySignal(hit.sourceId);
-      // if (this.points.length === 0) {
-      //   this.QuerySignal(hit.sourceId);
-      // } else {
-      //   this.points.push(ev.point);
-      // }
+        await this.createMesh();      
       }
     } 
     return EventHandled.No;
   }
   public async onResetButtonUp(_ev: BeButtonEvent): Promise<EventHandled> {
+    await this.DeleteDecorator();
     IModelApp.toolAdmin.startDefaultTool();
-    this.createMesh();
     return EventHandled.No;
   }
   private Cal2Point3dDistance(p1:Point3d,p2:Point3d) {
     const dis = (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z);
     return Math.sqrt(dis);
   }
+  private doc: Decorator | undefined = undefined;
   private async createMesh() {
+  //   if (this.points.length === 0) {
+  //     alert("点的个数为0");
+  //     return;
+  //   }
+  //   //测试需要;
+  //   const lightId = "0x200000001db";
+  //   const pillarId = "0x200000000ad";
+
+  //   const lightRange = await this.QueryElementRange3d(lightId);
+  //   const pillarRange = await this.QueryElementRange3d(pillarId);
+
+  //   if (!lightRange || !pillarRange) {
+  //     alert("灯或者柱子的范围不合法");
+  //     return;
+  //   }
+  //   //计算柱子的包围盒的最大直径;
+  //   const pillarRangeMaxDistance = this.CalRangeMaxDistance(pillarRange.ranger);
+
+  //   //信号灯源点;
+  //   const lightOrigin = lightRange.origin;
+  //   //圆柱子源点;
+  //   let pillarOrigin = pillarRange.origin;
+  //   pillarOrigin.z = lightOrigin.z;
+  //   //计算信号灯源点距离圆柱子源点的距离；
+  //   const dis = this.Cal2Point3dDistance(lightOrigin, pillarOrigin);
+  //   const sin = pillarRangeMaxDistance / dis;
+  //   //计算夹角;
+  //   const angle = Math.asin(sin);
+  
+  //   const v = new Vector3d(pillarOrigin.x - lightOrigin.x, pillarOrigin.y - lightOrigin.y);
+  //   const v1 = v.rotateXY(Angle.createRadians(angle));
+  //   const v2 = v.rotateXY(Angle.createRadians(-angle));
+
+  //   const r3d1 = Ray3d.create(lightOrigin, v1);
+  //   const r3d2 = Ray3d.create(lightOrigin, v2);
+  //   const p1 = r3d1.projectPointToRay(pillarOrigin);
+  //   const p2 = r3d2.projectPointToRay(pillarOrigin);
+
+  //   const seg1 = LineSegment3d.create(lightOrigin, p1);
+  //   const seg2 = LineSegment3d.create(lightOrigin, p2);
+
+  //   const p3 = seg1.fractionToPoint(10);
+  //   const p4 = seg2.fractionToPoint(10);
+  //   const seg3 = LineSegment3d.create(lightOrigin, p3);
+  //   const seg4 = LineSegment3d.create(lightOrigin, p4);
+
+  //   const p = this.points[0];
+  //   const vn = new Vector3d(p.x - lightOrigin.x, p.y - lightOrigin.y);
+  //   const cn = new Vector3d(vn.y, -vn.x);
+  //   const newArd = CurveFactory.createArcPointTangentPoint(lightOrigin, cn, p);
+  //   //////////////////////////////////////////////////
+  //   const lightAngle = Math.PI / 6;
+  //   let targetPoint = this.points[0];
+  //   targetPoint.z = lightOrigin.z;
+  //   //中轴向量
+  //   const axisVec = new Vector3d(targetPoint.x - lightOrigin.x, targetPoint.y - lightOrigin.y,targetPoint.z - lightOrigin.z);
+  //  //光线的边界向量
+  //   const leftVec = axisVec.rotateXY(Angle.createRadians(lightAngle));
+  //   const rightVec = axisVec.rotateXY(Angle.createRadians(-lightAngle));
+  //   //光线的边界射线
+  //   const leftRay3d = Ray3d.create(lightOrigin, leftVec);
+  //   const rightRay3d = Ray3d.create(lightOrigin, rightVec);
+
+  //   //目标点在边界射线投影
+  //   const leftProjectPoint = leftRay3d.projectPointToRay(targetPoint);
+  //   const rightProjectPoitn = rightRay3d.projectPointToRay(targetPoint);
+
+  //   const s1 = LineSegment3d.create(lightOrigin, leftProjectPoint);
+  //   const s2 = LineSegment3d.create(lightOrigin, rightProjectPoitn);
+  //   const arc = Arc3d.createCircularStartMiddleEnd(leftProjectPoint, targetPoint, rightProjectPoitn);
+   
+    
+  //   const intersePointLeft: CurveLocationDetailArrayPair = CurveCurve.intersectionXYZ(newArd!, true, seg3, true);
+  //   const intersePointRight: CurveLocationDetailArrayPair = CurveCurve.intersectionXYZ(newArd!, true, seg4, true);
+
+  //   let lightLoop = Loop.createArray([s1, arc!, s2]);
+  //   let loop: AnyRegion | undefined = undefined;
+  //   let ll: Loop;
+  //   if ( intersePointLeft && intersePointLeft.dataA.length > 0 && intersePointRight.dataA.length > 0) {
+  //     const pi1 = intersePointLeft.dataA[0].point;
+  //     const pi2 = intersePointRight.dataA[0].point;
+  //     const line1 = LineSegment3d.create(lightOrigin, pi1);
+  //     const line2 = LineSegment3d.create(lightOrigin, pi2);
+      
+  //     const psi1 = line1.fractionToPoint(20);
+  //     const psi2 = line2.fractionToPoint(20);
+  //     const obstacleLoop = Loop.createPolygon([p1, p2, psi2, psi1]);
+  //     ll = obstacleLoop as Loop;
+  //     const intersection = RegionOps.regionBooleanXY(lightLoop, obstacleLoop, RegionBinaryOpType.Intersection);	
+  //     if (intersection) {
+        
+  //       loop = RegionOps.regionBooleanXY(lightLoop, intersection, RegionBinaryOpType.AMinusB);   
+  //     }   
+  //   }
+
+
+  //   if (this.doc) {
+  //     IModelApp.viewManager.dropDecorator(this.doc);
+  //   }
+  //   if (loop as Loop) {
+  //     this.doc = new CustomDecorator(ll!);
+  //      IModelApp.viewManager.addDecorator(this.doc); 
+  //   } else if (loop as ParityRegion) {
+  //     alert("here2");
+  //     const pr = loop as ParityRegion;
+  //     this.doc = new CustomDecorator(pr.getChild(0)!);
+  //      IModelApp.viewManager.addDecorator(this.doc); 
+  //   } else if (!loop) {
+  //      alert("here3");
+  //      this.doc = new CustomDecorator(lightLoop);
+  //      IModelApp.viewManager.addDecorator(this.doc); 
+  //   }
+  //   else {
+  //     alert("Error");
+  //     return;
+  //   }
+
+
+    /////////////////////////////////////////////////////////////
     if (this.points.length === 0) {
       alert("点的个数为0");
       return;
@@ -263,8 +393,8 @@ export class SelectSignalTool extends PrimitiveTool {
     // const lightId = "0x2000000004d";
     // const pillarId = "0x2000000004b";
     //测试方柱子;
-    const lightId = "0x2000000004e";
-    const pillarId = "0x2000000004c";
+    const lightId = "0x200000001db";
+    const pillarId = "0x200000000ad";
     const lightRange = await this.QueryElementRange3d(lightId);
     const pillarRange = await this.QueryElementRange3d(pillarId);
     if (!lightRange || !pillarRange) {
@@ -275,14 +405,13 @@ export class SelectSignalTool extends PrimitiveTool {
     const pillarRangeMaxDistance = this.CalRangeMaxDistance(pillarRange.ranger);
 
     const lightOrigin = lightRange.origin;
+    
     //圆柱子
-    //const pillarOrigin = new Point3d(pillarRange.origin.x, pillarRange.origin.y);
-    //方柱子需要修改中心坐标;
-    const pillarOrigin = new Point3d(pillarRange.origin.x - 0.1,pillarRange.origin.y - 0.1);
-    const testArc = Arc3d.createXY(pillarOrigin, pillarRangeMaxDistance);
-    console.log(pillarOrigin);
+    let pillarOrigin = pillarRange.origin;
+    pillarOrigin.z = lightOrigin.z;
+  
     const dis = this.Cal2Point3dDistance(lightOrigin, pillarOrigin);
-    console.log(dis);
+  
     const sin = pillarRangeMaxDistance / dis;
     const angle = Math.asin(sin);
   
@@ -303,12 +432,13 @@ export class SelectSignalTool extends PrimitiveTool {
     const seg3 = LineSegment3d.create(lightOrigin, p3);
     const seg4 = LineSegment3d.create(lightOrigin, p4);
 
-    const p = this.points[0];
+    let p = this.points[0];
+    p.z = lightOrigin.z;
     const vn = new Vector3d(p.x - lightOrigin.x, p.y - lightOrigin.y);
     const cn = new Vector3d(vn.y, -vn.x);
     const newArd = CurveFactory.createArcPointTangentPoint(lightOrigin, cn, p);
     //////////////////////////////////////////////////
-    const lightAngle = Math.PI / 6;
+    const lightAngle = Math.PI / 9;
     const targetPoint = this.points[0];
     //中轴向量
     const axisVec = new Vector3d(targetPoint.x - lightOrigin.x, targetPoint.y - lightOrigin.y,targetPoint.z - lightOrigin.z);
@@ -324,7 +454,6 @@ export class SelectSignalTool extends PrimitiveTool {
     const rightProjectPoitn = rightRay3d.projectPointToRay(targetPoint);
 
     const s1 = LineSegment3d.create(lightOrigin, leftProjectPoint);
-    const s2 = LineSegment3d.create(lightOrigin, targetPoint);
     const s3 = LineSegment3d.create(lightOrigin, rightProjectPoitn);
     const arc = Arc3d.createCircularStartMiddleEnd(leftProjectPoint, targetPoint, rightProjectPoitn);
    
@@ -332,37 +461,43 @@ export class SelectSignalTool extends PrimitiveTool {
     const intersePointLeft: CurveLocationDetailArrayPair = CurveCurve.intersectionXYZ(newArd!, true, seg3, true);
     const intersePointRight: CurveLocationDetailArrayPair = CurveCurve.intersectionXYZ(newArd!, true, seg4, true);
 
-    const geomDatas: GeomtryData[] = [];
     let lightLoop = Loop.createArray([s1, arc!, s3]);
     let loop: AnyRegion | undefined = undefined;
+    let lp: Loop|undefined = undefined;
     if ( intersePointLeft && intersePointLeft.dataA.length > 0 && intersePointRight.dataA.length > 0) {
       const pi1 = intersePointLeft.dataA[0].point;
       const pi2 = intersePointRight.dataA[0].point;
-      const si1 = LineSegment3d.create(lightOrigin, pi1);
-      const si2 = LineSegment3d.create(lightOrigin, pi2);
+      const line1 = LineSegment3d.create(lightOrigin, pi1);
+      const line2 = LineSegment3d.create(lightOrigin, pi2);
       
-      const psi1 = si1.fractionToPoint(10);
-      const psi2 = si2.fractionToPoint(10);
+      const psi1 = line1.fractionToPoint(5);
+      const psi2 = line2.fractionToPoint(5);
       const obstacleLoop = Loop.createPolygon([p1, p2, psi2, psi1]);
       const intersection = RegionOps.regionBooleanXY(lightLoop, obstacleLoop, RegionBinaryOpType.Intersection);	
+      console.log(intersection);
+      const un = intersection as UnionRegion;
+      lp = un.getChild(0) as Loop;
       if (intersection) {
-        loop = RegionOps.regionBooleanXY(lightLoop,intersection,RegionBinaryOpType.AMinusB);
+        loop = RegionOps.regionBooleanXY(lightLoop, intersection, RegionBinaryOpType.AMinusB);
+        console.log(loop);
       }
     }
-    const lightGeometryStreamBuilder = new GeometryStreamBuilder();
-    if (loop) {
-      lightGeometryStreamBuilder.appendGeometry(loop);
-    } else {
-      alert("lightLoop");
-      lightGeometryStreamBuilder.appendGeometry(lightLoop);
+
+    if (this.doc) {
+      IModelApp.viewManager.dropDecorator(this.doc);
     }
-    geomDatas.push({
-      geom: lightGeometryStreamBuilder.geometryStream,
-      categoryAppearance: {invisible:false, priority:2,color: ColorDef.fromString("rgb(255,255,0)").toJSON() }
-    });
-    await ElementEdit(geomDatas);
+    if (loop) {
+      const uu = loop as UnionRegion;
+      this.doc = new CustomDecorator(uu.getChild(0) as Loop);
+      IModelApp.viewManager.addDecorator(this.doc); 
+    }
+    //await ElementEdit(geomDatas);
     // 最后两个就是控制透明度的，一个是控制边界线透明度的，一个是控制填充色透明度的
-    
+  }
+  private  async DeleteDecorator() {
+    if (this.doc) {
+      IModelApp.viewManager.dropDecorator(this.doc);
+    }
   }
   public onRestartTool(): void {
     const tool = new SelectSignalTool();
@@ -387,7 +522,7 @@ export class SelectSignalTool extends PrimitiveTool {
           const box: Readonly<LowAndHighXYZ> = place.bbox;
           const ranger = Range3d.fromJSON(box);
           const origin = Point3d.fromJSON(place.origin);
-          console.log(geom);
+          //console.log(geom);
           return {ranger,origin};
         }
       }
@@ -501,6 +636,34 @@ async function  ExportIFC() {
   // }
   //  const workDir = __dirname + "/../../lib/output/";
   //  await IModelApp.iModelClient.briefcases.download(requestContext, imodelId,workDir);
-  console.log(requestContext);
+  //console.log(requestContext);
    await ExportIFCInterface.getClient().ExportIFCToFile(token, "4x3");
 }
+
+    class CustomDecorator implements Decorator {
+      private _loop: Loop | undefined = undefined;
+      public constructor(loop: Loop) {
+        this._loop = loop;
+      }
+      public decorate(context: DecorateContext) {
+        if (this._loop) {
+          // draw semi-transparent polyline from top left to bottom right of vp
+          const overlayBuilder = context.createGraphicBuilder(GraphicType.WorldDecoration);
+          const polylineColor = ColorDef.from(0, 255, 0, 128);
+          overlayBuilder.setSymbology(polylineColor, polylineColor, 10);
+          overlayBuilder.addLoop(this._loop);
+          //overlayBuilder.addLoop(ll);
+          // const box = Box.createRange(pillarRange!.ranger, true);
+          // const t = Transform.createTranslation(pillarRange!.origin);
+          // box!.tryTransformInPlace(t);
+          //       const strokeOptions = new StrokeOptions();
+          //       strokeOptions.needParams = strokeOptions.shouldTriangulate = true;
+          //       const polyfaceBuilder = PolyfaceBuilder.create(strokeOptions);
+          //       polyfaceBuilder.addBox(box!);
+          //       const target = polyfaceBuilder.claimPolyface();
+               // overlayBuilder.addPolyface(target,true);
+
+          context.addDecorationFromBuilder(overlayBuilder);
+        }
+      }
+    }
