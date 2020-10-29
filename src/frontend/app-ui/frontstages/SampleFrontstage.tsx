@@ -13,6 +13,7 @@ import { AppUi } from "../AppUi";
 import { TableContent } from "../contentviews/TableContent";
 import { AppStatusBarWidget } from "../statusbars/AppStatusBar";
 import { PropertyGridWidget } from "../widgets/PropertyGridWidget";
+import { TestWidget } from "../widgets/TestWidget";
 import { TreeWidget } from "../widgets/TreeWidget";
 import { TestFeature } from "./Feature";
 
@@ -90,6 +91,18 @@ export class SampleFrontstage extends FrontstageProvider {
           <Zone defaultState={ZoneState.Minimized} allowsMerging={true}
             widgets={[
               <Widget control={TreeWidget} fillZone={true}
+                iconSpec="icon-tree" labelKey="NineZoneSample:components.tree"
+                applicationData={{
+                  iModelConnection: UiFramework.getIModelConnection(),
+                }}
+              />,
+            ]}
+          />
+        }
+        centerLeft={
+          <Zone defaultState={ZoneState.Minimized} allowsMerging={true}
+            widgets={[
+              <Widget control={TestWidget} fillZone={true}
                 iconSpec="icon-tree" labelKey="NineZoneSample:components.tree"
                 applicationData={{
                   iModelConnection: UiFramework.getIModelConnection(),
