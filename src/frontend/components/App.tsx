@@ -190,30 +190,6 @@ interface OpenIModelButtonState {
 class OpenIModelButton extends React.PureComponent<OpenIModelButtonProps, OpenIModelButtonState> {
   public state = { isLoading: false };
 
-  /** Finds project and imodel ids using their names */
-  private async getIModelInfo(): Promise<{ projectId: string, imodelId: string }> {
-    const imodelName = Config.App.get("imjs_test_imodel");
-    const projectName = Config.App.get("imjs_test_project", imodelName);
-
-    const requestContext: AuthorizedFrontendRequestContext = await AuthorizedFrontendRequestContext.create();
-
-    const connectClient = new ContextRegistryClient();
-    let project: Project;
-    try {
-      const projects: Project[] = await connectClient.getInvitedProjects(requestContext, { $filter: `Name+eq+'${projectName}'` });
-      project = projects[0];
-    } catch (e) {
-      throw new Error(`Project with name "${projectName}" does not exist`);
-    }
-
-    const imodelQuery = new IModelQuery();
-    imodelQuery.byName(imodelName);
-    const imodels = await IModelApp.iModelClient.iModels.get(requestContext, project.wsgId, imodelQuery);
-    if (imodels.length === 0)
-      throw new Error(`iModel with name "${imodelName}" does not exist in project "${projectName}"`);
-
-    return { projectId: project.wsgId, imodelId: imodels[0].wsgId };
-  }
 
   /** Handle iModel open event */
   private async onIModelSelected(imodel: IModelConnection | undefined) {
@@ -240,6 +216,8 @@ class OpenIModelButton extends React.PureComponent<OpenIModelButtonProps, OpenIM
         // imodel = await RemoteBriefcaseConnection.open(info.projectId, info.imodelId, OpenMode.Readonly);
         const info = await this.getIModelInfo_Bank();
         imodel = await RemoteBriefcaseConnection.open(info.contextId, info.imodelId, OpenMode.ReadWrite);
+        // await CrossProbingApp.loadElementMap(imodel);
+        // console.log(CrossProbingApp.elementMap);
       }
     } catch (e) {
       alert(e.message);

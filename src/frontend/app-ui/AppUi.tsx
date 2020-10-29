@@ -7,6 +7,7 @@ import {  BackstageManager, CommandItemDef, ConfigurableUiManager, FrontstageMan
 import { TestDeSerializationView, TestShadow } from "./frontstages/Feature";
 import { SampleFrontstage } from "./frontstages/SampleFrontstage";
 import { SampleFrontstage2 } from "./frontstages/SampleFrontstage2";
+import { View2D3DFrontstage } from "./frontstages/View2D3DFrontstage";
 
 /**
  * Example Ui Configuration for an iModel.js App
@@ -45,6 +46,9 @@ export class AppUi {
     // We create a FrontStage that contains the views that we want.
     const frontstageProvider2 = new SampleFrontstage2(viewStates);
     FrontstageManager.addFrontstageProvider(frontstageProvider2);
+
+    const view2D3D = new View2D3DFrontstage(viewStates);
+    FrontstageManager.addFrontstageProvider(view2D3D);
   }
 
 }

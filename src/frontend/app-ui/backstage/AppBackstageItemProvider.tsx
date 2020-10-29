@@ -19,6 +19,8 @@ export class AppBackstageItemProvider {
           IModelApp.i18n.translate("NineZoneSample:backstage.sampleFrontstage"), undefined, "icon-placeholder"),
         BackstageItemUtilities.createStageLauncher("SampleFrontstage2", 100, 20,
           IModelApp.i18n.translate("NineZoneSample:backstage.sampleFrontstage2"), undefined, "icon-placeholder"),
+        BackstageItemUtilities.createStageLauncher("View2D3DFrontstage", 100, 30,
+          "2D/3D视图联动", undefined, "icon-placeholder"),
       ];
     }
     return this._backstageItems;
