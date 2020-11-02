@@ -1,7 +1,9 @@
-import { Logger } from "@bentley/bentleyjs-core";
+import { Config, Logger } from "@bentley/bentleyjs-core";
 import { AngleSweep, Arc3d, Point2d, Point3d, XAndY, XYAndZ } from "@bentley/geometry-core";
 import { AxisAlignedBox3d, ColorByName, ColorDef } from "@bentley/imodeljs-common";
 import { BeButton, BeButtonEvent, Cluster, DecorateContext, EventHandled, GraphicType, imageElementFromUrl, IModelApp, Marker, MarkerImage, MarkerSet, MessageBoxIconType, MessageBoxType, PrimitiveTool, Tool, Viewport } from "@bentley/imodeljs-frontend";
+import SVTRpcInterface from "../../common/SVTRpcInterface";
+import { AppUi, MarkState } from "../app-ui/AppUi";
 
 /** Example Marker to show an *incident*. Each incident has an *id*, a *severity*, and an *icon*. */
 class IncidentMarker extends Marker {
@@ -27,17 +29,22 @@ class IncidentMarker extends Marker {
       IModelApp.notifications.openMessageBox(MessageBoxType.LargeOk, `severity = ${this.severity}`, MessageBoxIconType.Information); // eslint-disable-line @typescript-eslint/no-floating-promises
     return true;
   }
-
+  public severity: number;
+  public id: number;
   /** Create a new IncidentMarker */
-  constructor(location: XYAndZ, public severity: number, public id: number, icon: HTMLImageElement,text:string) {
-    super(location, IncidentMarker._size);
-    this._color = IncidentMarker.makeColor(severity); // color interpolated from severity
+  constructor(markdata: MarkState) {
+    const point: Point3d = Point3d.fromJSON(markdata.location);
+    super(point, IncidentMarker._size);
+    this.severity = markdata.severity;
+    this.id = markdata.id;
+    this._color = IncidentMarker.makeColor(markdata.severity); // color interpolated from severity
+    const icon = AppUi.images[markdata.iconIndex];
     this.setImage(icon); // save icon
     this.imageOffset = IncidentMarker._imageOffset; // move icon up by 30 pixels so the bottom of the flag is at the incident location in the view.
     this.imageSize = IncidentMarker._imageSize; // 40x40
-    this.title = `Severity: ${text}<br>Id: ${id}`; // tooltip
+    this.title = `Tag: ${markdata.text}`; // tooltip
     this.setScaleFactor({ low: .2, high: 1.4 }); // make size 20% at back of frustum and 140% at front of frustum (if camera is on)
-    this.label = id.toString();
+    this.label = markdata.id.toString();
   }
 
   /**
@@ -136,14 +143,10 @@ class IncidentMarkerSet extends MarkerSet<IncidentMarker> {
 export class IncidentMarkerDemo {
   private _awaiting = false;
   private _loading?: Promise<any>;
-  private _images: Array<HTMLImageElement | undefined> = [];
   public readonly incidents = new IncidentMarkerSet();
-  private static _numMarkers = 500;
-  public static decorator?: IncidentMarkerDemo; // static variable so we can tell if the demo is active.
+  public static decorator?: IncidentMarkerDemo; 
 
-  public get warningSign() { return this._images[0]; }
-
-  // Load one image, logging if there was an error
+  public get warningSign() { return AppUi.images[0]; }
   private async loadOne(src: string) {
     try {
       return await imageElementFromUrl(src); // note: "return await" is necessary inside try/catch
@@ -154,47 +157,15 @@ export class IncidentMarkerDemo {
     }
     return undefined;
   }
+    private async loadAll( d: MarkState) {
 
-  // load all images. After they're loaded, make the incident markers.
-  // If there will be a lot of markers displayed, it's best to draw images without scaling.
-  // The Warning_sign.svg used in this example is quite large and is always being scaled down.
-    private async loadAll(extents: AxisAlignedBox3d, point: Point3d) {
-        console.log(extents);
-    let loads = [
-      this.loadOne("Warning_sign.svg"), // must be first, see "get warningSign()" above
-      this.loadOne("Hazard_biological.svg"),
-      this.loadOne("Hazard_electric.svg"),
-      this.loadOne("Hazard_flammable.svg"),
-      this.loadOne("Hazard_toxic.svg"),
-      this.loadOne("Hazard_tripping.svg"),
-    ];
-    await (this._loading = Promise.all(loads)); // this is a member so we can tell if we're still loading
-    for (let img of loads)
-      this._images.push(await img);
-        let img = this._images[0];
-        //img!.textContent = "hello,world";
-    // const len = this._images.length;
-    // const pos = new Point3d();
-    // for (let i = 0; i < IncidentMarkerDemo._numMarkers; ++i) {
-    //   pos.x = extents.low.x + (Math.random() * extents.xLength());
-    //   pos.y = extents.low.y + (Math.random() * extents.yLength());
-    //   pos.z = extents.low.z + (Math.random() * extents.zLength());
-    //   const img = this._images[(i % len) + 1];
-    //   if (undefined !== img)
-    //     this.incidents.markers.add(new IncidentMarker(pos, 1 + Math.round(Math.random() * 29), i, img));
-    // }
-    this.incidents.markers.add(new IncidentMarker(point, 1 + Math.round(Math.random() * 29), 1, img!,"这个地方画错了"));
+    this.incidents.markers.add(new IncidentMarker(d));
     this._loading = undefined;
   }
 
-  public constructor(extents: AxisAlignedBox3d,point:Point3d) {
-    this.loadAll(extents,point); // eslint-disable-line @typescript-eslint/no-floating-promises
+  public constructor( d:MarkState) {
+    this.loadAll(d); // eslint-disable-line @typescript-eslint/no-floating-promises
   }
-
-  /** This will allow the render system to cache and reuse the decorations created by this decorator's decorate() method. */
-  public readonly useCachedDecorations = true;
-
-  /** We added this class as a ViewManager.decorator below. This method is called to ask for our decorations. We add the MarkerSet. */
   public decorate(context: DecorateContext) {
     if (!context.viewport.view.isSpatialView())
       return;
@@ -203,8 +174,6 @@ export class IncidentMarkerDemo {
       this.incidents.addDecoration(context);
       return;
     }
-
-    // if we're still loading, just mark this viewport as needing decorations when all loads are complete
     if (!this._awaiting) {
       this._awaiting = true;
       this._loading.then(() => {
@@ -214,41 +183,36 @@ export class IncidentMarkerDemo {
     }
   }
 
-  /** start the demo by creating the IncidentMarkerDemo object and adding it as a ViewManager decorator. */
-  private static start(extents: AxisAlignedBox3d,point:Point3d) {
-    IncidentMarkerDemo.decorator = new IncidentMarkerDemo(extents,point);
+  private static async start(extents: AxisAlignedBox3d, point: Point3d) {
+    console.log(extents);
+    const markData: MarkState = {
+        location: point,
+        iconIndex: 0,
+        severity: 10,
+        id: 0,
+        text:"信号灯放置位置不合适，请修正。",
+    };
+    const str = JSON.stringify(markData);
+    const savedMarkFilePath = Config.App.get("imjs_mark_file");
+    await SVTRpcInterface.getClient().writeExternalSavedViews(savedMarkFilePath,str);
+    IncidentMarkerDemo.decorator = new IncidentMarkerDemo(markData);
     IModelApp.viewManager.addDecorator(IncidentMarkerDemo.decorator);
-
-    // hook the event for viewport changing and stop the demo. This is called when the view is closed too. */
     IncidentMarkerDemo.decorator.incidents.viewport!.onChangeView.addOnce(() => this.stop());
   }
 
-  /** stop the demo */
   private static stop() {
     if (IncidentMarkerDemo.decorator)
       IModelApp.viewManager.dropDecorator(IncidentMarkerDemo.decorator);
     IncidentMarkerDemo.decorator = undefined;
   }
 
-  /** Turn the markers on and off. Each time it runs it creates a new random set of incidents. */
-  public static toggle(extents: AxisAlignedBox3d,point:Point3d) {
+  public  static async toggle(extents: AxisAlignedBox3d,point:Point3d) {
     if (undefined === IncidentMarkerDemo.decorator)
-      this.start(extents,point);
+      {await this.start(extents,point);}
     else
-      this.stop();
+      {this.stop();}
   }
 }
-
-// export class IncidentMarkerDemoTool extends Tool {
-//   public static toolId = "ToggleIncidentMarkers";
-//   public run(_args: any[]): boolean {
-//     const vp = IModelApp.viewManager.selectedView;
-//     if (undefined !== vp && vp.view.isSpatialView())
-//       IncidentMarkerDemo.toggle(vp.view.iModel.projectExtents);
-
-//     return true;
-//   }
-// }
 
 export class IncidentMarkerDemoTool extends PrimitiveTool {
   public static toolId = "ToggleIncidentMarkers"; // <== Used to find flyover (tool name), description, and keyin from namespace tool registered with...see CoreTools.json for example...
@@ -264,28 +228,19 @@ export class IncidentMarkerDemoTool extends PrimitiveTool {
   public onRestartTool(): void { this.exitTool(); }
 
   protected setupAndPromptForNextAction(): void {
-    // Accusnap adjusts the effective cursor location to 'snap' to geometry in the view
     IModelApp.accuSnap.enableSnap(true);
   }
 
-  // A reset button is the secondary action button, ex. right mouse button.
   public async onResetButtonUp(_ev: BeButtonEvent): Promise<EventHandled> {
     this.onReinitialize(); // Calls onRestartTool to exit
     return EventHandled.No;
   }
-
-  // A data button is the primary action button, ex. left mouse button.
   public async onDataButtonDown(ev: BeButtonEvent): Promise<EventHandled> {
     if (undefined === ev.viewport)
       return EventHandled.No; // Shouldn't really happen
-
-    // ev.point is the current world coordinate point adjusted for snap and locks
-    // this._createMarkerCallback(ev.point);
-      //     const vp = IModelApp.viewManager.selectedView;
       const vp = IModelApp.viewManager.selectedView;
     if (undefined !== vp && vp.view.isSpatialView())
-      IncidentMarkerDemo.toggle(vp.view.iModel.projectExtents,ev.point);
-      
+     await IncidentMarkerDemo.toggle(vp.view.iModel.projectExtents, ev.point);
     this.onReinitialize(); // Calls onRestartTool to exit
     return EventHandled.No;
   }

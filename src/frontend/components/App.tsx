@@ -2,13 +2,13 @@
 * Copyright (c) Bentley Systems, Incorporated. All rights reserved.
 * See LICENSE.md in the project root for license terms and full copyright notice.
 *--------------------------------------------------------------------------------------------*/
-import { ClientRequestContext, Config, OpenMode } from "@bentley/bentleyjs-core";
+import { ClientRequestContext, Config, Logger, OpenMode } from "@bentley/bentleyjs-core";
 import { ContextRegistryClient, Project } from "@bentley/context-registry-client";
 // make sure webfont brings in the icons and css files.
 import "@bentley/icons-generic-webfont/dist/bentley-icons-generic-webfont.css";
 import { IModelQuery } from "@bentley/imodelhub-client";
 import { ElectronRpcConfiguration } from "@bentley/imodeljs-common";
-import { AuthorizedFrontendRequestContext, FrontendRequestContext, IModelApp, IModelConnection, RemoteBriefcaseConnection, SnapshotConnection, ViewState } from "@bentley/imodeljs-frontend";
+import { AuthorizedFrontendRequestContext, FrontendRequestContext, imageElementFromUrl, IModelApp, IModelConnection, RemoteBriefcaseConnection, SnapshotConnection, ViewState } from "@bentley/imodeljs-frontend";
 import { SignIn } from "@bentley/ui-components";
 import { Button, ButtonSize, ButtonType, Spinner, SpinnerSize } from "@bentley/ui-core";
 import { ConfigurableUiContent, UiFramework } from "@bentley/ui-framework";
@@ -203,6 +203,18 @@ class OpenIModelButton extends React.PureComponent<OpenIModelButtonProps, OpenIM
     const contextId = Config.App.get("imjs_test_context_id");
     return { contextId, imodelId };
   }
+    // Load one image, logging if there was an error
+  private async loadOne(src: string) {
+    try {
+      return await imageElementFromUrl(src); // note: "return await" is necessary inside try/catch
+    } catch (err) {
+      const msg = `Could not load image ${src}`;
+      Logger.logError("IncidentDemo", msg);
+      console.log(msg); // eslint-disable-line no-console
+    }
+    return undefined;
+  }
+private _loading?: Promise<any>;
   private _onClickOpen = async () => {
     this.setState({ isLoading: true });
     let imodel: IModelConnection | undefined;
@@ -218,6 +230,19 @@ class OpenIModelButton extends React.PureComponent<OpenIModelButtonProps, OpenIM
         imodel = await RemoteBriefcaseConnection.open(info.contextId, info.imodelId, OpenMode.ReadWrite);
         // await CrossProbingApp.loadElementMap(imodel);
         // console.log(CrossProbingApp.elementMap);
+
+        let loads = [
+          this.loadOne("Warning_sign.svg"), // must be first, see "get warningSign()" above
+          this.loadOne("Hazard_biological.svg"),
+          this.loadOne("Hazard_electric.svg"),
+          this.loadOne("Hazard_flammable.svg"),
+          this.loadOne("Hazard_toxic.svg"),
+          this.loadOne("Hazard_tripping.svg"),
+        ];
+       // await (this._loading = Promise.all(loads)); // this is a member so we can tell if we're still loading
+        for await (const image of loads) {
+          AppUi.images.push(image!);
+        }
       }
     } catch (e) {
       alert(e.message);

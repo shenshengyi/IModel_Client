@@ -5,10 +5,12 @@ import { BeButtonEvent, BeWheelEvent, DecorateContext, Decorator, EventHandled, 
 import { CommandItemDef, ItemList, SavedView, SavedViewProps, UiFramework } from "@bentley/ui-framework";
 import ExportIFCInterface from "../../../common/ExportIFCInterface";
 import SVTRpcInterface from "../../../common/SVTRpcInterface";
-import { IncidentMarkerDemoTool } from "../../api/IncidentClusterMarker";
+import { DrawLineTool } from "../../api/DrawLineTool";
+import { IncidentMarkerDemo, IncidentMarkerDemoTool } from "../../api/IncidentClusterMarker";
 import MarkerPinApp from "../../api/MarkerPinApp";
 import { PlaceMarkerTool } from "../../api/PlaceMarkerTool";
 import { ViewCreator3d } from "../../api/ViewCreater3d";
+import { AppUi, MarkState } from "../AppUi";
 
 export class TestFeature {
   public static CreateCommand(
@@ -36,7 +38,29 @@ export class TestFeature {
     TestFeature.CreateCommand("ExportIFC", "导出IFC", ExportIFC),
     TestFeature.CreateCommand("DeleteElement", "删除指定元素", DeleteElement),
     TestFeature.CreateCommand("PlaceMarker", "标记Mark", PlaceMarker),
+    TestFeature.CreateCommand("DrawLineCommand", "画线命令", DrawLineCommand),
+    TestFeature.CreateCommand("DisplayMark", "显示用户标记Mark", DisplayMark),
+    TestFeature.CreateCommand("HideMark", "隐藏用户标记Mark", HideMark),
   ]);
+}
+async function DisplayMark() {
+  const savedMarkFilePath = Config.App.get("imjs_mark_file");
+  const mark = await SVTRpcInterface.getClient().readExternalSavedViews(savedMarkFilePath);
+  const markdata: MarkState = JSON.parse(mark);
+  if (markdata) {
+    const decorator = new IncidentMarkerDemo(markdata);
+    AppUi.IncidentMarkerDemoList.push(decorator);
+    IModelApp.viewManager.addDecorator(decorator);
+  }
+}
+async function HideMark() {
+  for (const doc of AppUi.IncidentMarkerDemoList) {
+    IModelApp.viewManager.dropDecorator(doc);
+  }
+  AppUi.IncidentMarkerDemoList.slice(0,0);
+}
+async function  DrawLineCommand() {
+  IModelApp.tools.run(DrawLineTool.toolId); 
 }
 async function PlaceMarker() {
   await MarkerPinApp.setup();
@@ -212,6 +236,7 @@ export class SelectSignalTool extends PrimitiveTool {
     if (hit !== undefined) {
     const props = await this.iModel.elements.getProps(hit.sourceId);
       if (props && props.length > 0) {
+        //alert(hit.sourceId);
         await this.createMesh();      
       }
     } 
@@ -234,9 +259,9 @@ export class SelectSignalTool extends PrimitiveTool {
       return;
     }
     //信号灯ID
-    const lightId = "0x200000001db";
+    const lightId = "0x20000000145";
     //柱子ID
-    const pillarId = "0x200000000ad";
+    const pillarId = "0x200000000b2";
     const lightRange = await this.QueryElementRange3d(lightId);
     const pillarRange = await this.QueryElementRange3d(pillarId);
     if (!lightRange || !pillarRange) {

@@ -11,6 +11,7 @@ import { IModelApp, IModelAppOptions } from "@bentley/imodeljs-frontend";
 import { Presentation } from "@bentley/presentation-frontend";
 import { AppNotificationManager, UiFramework } from "@bentley/ui-framework";
 import { getSupportedRpcs } from "../../common/rpcs";
+import { DrawLineTool } from "../api/DrawLineTool";
 import { IncidentMarkerDemoTool } from "../api/IncidentClusterMarker";
 import MarkerPinApp from "../api/MarkerPinApp";
 import { PlaceMarkerTool } from "../api/PlaceMarkerTool";
@@ -82,6 +83,7 @@ export class NineZoneSampleApp {
     DeleteElementTool.register(IModelApp.i18n.getNamespace("NineZoneSample"));
     PlaceMarkerTool.register(IModelApp.i18n.getNamespace("NineZoneSample"));
     IncidentMarkerDemoTool.register(IModelApp.i18n.getNamespace("NineZoneSample"));
+    DrawLineTool.register(IModelApp.i18n.getNamespace("NineZoneSample"));
   }
   private static async initializeRpc(): Promise<void> {
     const rpcInterfaces = getSupportedRpcs();

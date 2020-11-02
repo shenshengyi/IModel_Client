@@ -2,8 +2,10 @@
 * Copyright (c) Bentley Systems, Incorporated. All rights reserved.
 * See LICENSE.md in the project root for license terms and full copyright notice.
 *--------------------------------------------------------------------------------------------*/
+import { Point3d, XYAndZ } from "@bentley/geometry-core";
 import { IModelConnection, ViewState } from "@bentley/imodeljs-frontend";
 import {  BackstageManager, CommandItemDef, ConfigurableUiManager, FrontstageManager, SyncUiEventDispatcher, UiFramework } from "@bentley/ui-framework";
+import { IncidentMarkerDemo } from "../api/IncidentClusterMarker";
 import { TestDeSerializationView, TestShadow } from "./frontstages/Feature";
 import { SampleFrontstage } from "./frontstages/SampleFrontstage";
 import { SampleFrontstage2 } from "./frontstages/SampleFrontstage2";
@@ -51,4 +53,17 @@ export class AppUi {
     FrontstageManager.addFrontstageProvider(view2D3D);
   }
 
+  public static images: HTMLImageElement[] = [];
+  public static MarkStateList: MarkState[] = [];
+  public static IncidentMarkerDemoList: IncidentMarkerDemo[] = [];
+}
+
+
+export interface MarkState
+{
+  location: Point3d;
+  severity: number;
+  id: number;
+  iconIndex: number;
+  text: string;
 }
